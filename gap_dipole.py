@@ -39,8 +39,10 @@ from ase.data import chemical_symbols
 # --------------------------------------------------------------------------------------
 # Configuration (edit here)
 # --------------------------------------------------------------------------------------
-BASE_DIR   = "/home/reece/Work/GAP Testing"
-QUIP_PROG  = "/home/reece/QUIP/builddir/src/Programs"
+BASE_DIR   = os.path.dirname(os.path.abspath(__file__))   # this project dir (portable: move it/run anywhere)
+# gap_fit/quip binaries are OUTSIDE the project and machine-specific -> override with QUIP_BIN env var
+# (e.g. on Mahti: export QUIP_BIN=/path/to/QUIP/build/.../Programs).
+QUIP_PROG  = os.environ.get("QUIP_BIN", "/home/reece/QUIP/builddir/src/Programs")
 GAP_FIT    = os.path.join(QUIP_PROG, "gap_fit")
 QUIP       = os.path.join(QUIP_PROG, "quip")
 PYTHON     = sys.executable                       # this quipenv interpreter (for trim.py/errorcalc.py)
