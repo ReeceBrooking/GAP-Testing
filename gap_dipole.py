@@ -48,11 +48,11 @@ TRIM_PY    = os.path.join(BASE_DIR, "trim.py")
 ERRORCALC  = os.path.join(BASE_DIR, "errorcalc.py")
 
 # Dataset (waterbulk)
-TRAIN_FULL = os.path.join(BASE_DIR, "CHO", "trainCHO.xyz")
-TEST_FULL  = os.path.join(BASE_DIR, "CHO", "testCHO.xyz")
+TRAIN_FULL = os.path.join(BASE_DIR, "waterbulk", "train_waterbulk.xyz")
+TEST_FULL  = os.path.join(BASE_DIR, "waterbulk", "test_waterbulk.xyz")
 REF_KEY    = "mu"        # reference total dipole key in the xyz header (info)
 PRED_KEY   = "dipole"    # predicted total dipole key (ASE calc.results)
-SPECIES_Z  = [1, 6, 8]      # H, O -> n_species=2; central_index runs 1..n_species
+SPECIES_Z  = [1, 8]      # H, O -> n_species=2; central_index runs 1..n_species
 
 # Descriptor choice: "soap_turbo" (preferred) or "soap" (fallback, known-working)
 DESCRIPTOR = "soap_turbo"
@@ -98,12 +98,12 @@ RUNS_DIR = os.path.join(BASE_DIR, "runs")
 # it equals soap_turbo's cutoff_transition_width (QUIP/literature default 0.5).
 # --------------------------------------------------------------------------------------
 HYPERPARAMS = {
-    "rcut_hard":            {"fixed": 3.0, "bounds": [2.0, 8.0],   "type": "float"},
+    "rcut_hard":            {"fixed": 4.0, "bounds": [2.0, 8.0],   "type": "float"},
     "rcut_transition":      {"fixed": 0.5, "bounds": [0.3, 1.0],   "type": "float"},
     "l_max":                {"fixed": 7,   "bounds": [2, 7],       "type": "int"},
     "alpha_max":            {"fixed": 7,   "bounds": [4, 7],      "type": "int"},
-    "atom_sigma_r":         {"fixed": 0.4, "bounds": [0.1, 0.6],   "type": "float"},
-    "atom_sigma_t":         {"fixed": 0.4, "bounds": [0.1, 0.6],   "type": "float"},
+    "atom_sigma_r":         {"fixed": 0.5, "bounds": [0.1, 0.6],   "type": "float"},
+    "atom_sigma_t":         {"fixed": 0.5, "bounds": [0.1, 0.6],   "type": "float"},
     "atom_sigma_r_scaling": {"fixed": 0.0, "bounds": [0.0, 0.5],   "type": "float"},
     "atom_sigma_t_scaling": {"fixed": 0.0, "bounds": [0.0, 0.5],   "type": "float"},
     "amplitude_scaling":    {"fixed": 1.0, "bounds": [0.0, 4.0],   "type": "float"},
@@ -111,7 +111,7 @@ HYPERPARAMS = {
     "radial_enhancement":   {"fixed": 0,   "bounds": [0, 2],       "type": "int"},
     "zeta":                 {"fixed": 2,   "bounds": [1, 4],       "type": "int"},
     "delta":                {"fixed": 1.0, "bounds": [0.1, 2.0],   "type": "float"},
-    "n_sparse":             {"fixed": 500, "bounds": [100, 5000],  "type": "int"},
+    "n_sparse":             {"fixed": 300, "bounds": [100, 5000],  "type": "int"},
     # gap_fit-level dipole regularisation (default_dipole_sigma; gap_fit's own default is 0.001).
     # "scale": "log" -> the Sobol sampler draws it LOG-uniformly across the bounds (regularisation
     # spans orders of magnitude); results.csv still stores the real value. Applied in gap_fit_cmd,

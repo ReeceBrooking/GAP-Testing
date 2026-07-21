@@ -27,7 +27,7 @@ import sys
 import time
 
 import numpy as np
-from ase.io import read, write
+from ase.io import read
 from SALib.sample import sobol as sobol_sample
 from SALib.analyze import sobol as sobol_analyze
 
@@ -56,9 +56,22 @@ N_SOBOL           = 16     # base sample size (power of 2). runs = N*(D+2) if se
 CALC_SECOND_ORDER = False  # True -> also pairwise interactions, at N*(2D+2) fits
 
 # Concurrency: run several fits at once, each capped to gap_dipole.THREADS cores. Default fills the
-# machine (cores // THREADS): 16 cores / 4 threads -> 4 fits; on Mahti 128/4 -> 32. Overridable with
-# --jobs. Watch memory: each concurrent fit holds its own covariance matrix (grows with n_sparse).
-MAX_PARALLEL_FITS = max(1, (os.cpu_count() or 1) // core.THREADS)
+# ALLOCATION (allocated_cpus // THREADS), not the whole physical node. On SLURM (Mahti) this reads
+# the job's core count so a partial allocation isn't oversubscribed; os.cpu_count() (full node) is a
+# last resort. Overridable with --jobs. Watch memory: each concurrent fit holds its own covariance
+# matrix (grows with n_sparse). NOTE: this is SINGLE-NODE only -- for multiple nodes use a SLURM
+# array (one gap_dipole.py per task), not this thread pool.
+def _allocated_cpus():
+    """CPUs available to THIS process: SLURM allocation -> cgroup affinity -> full node."""
+    for var in ("SLURM_CPUS_ON_NODE", "SLURM_CPUS_PER_TASK"):
+        if os.environ.get(var):
+            return int(os.environ[var])
+    try:
+        return len(os.sched_getaffinity(0))   # respects SLURM/cgroup CPU binding (Linux)
+    except AttributeError:
+        return os.cpu_count() or 1
+
+MAX_PARALLEL_FITS = max(1, _allocated_cpus() // core.THREADS)
 
 # Pilot speed knobs (subsample the data so the sweep is cheap; None = use the full sets)
 SUBSAMPLE_TRAIN = None
@@ -126,10 +139,8 @@ def params_from_row(row):
     """Map a SALib sample row to a named param dict: log vars -> 10**val, int vars rounded."""
     p = {}
     for name, val, typ, scale in zip(PROBLEM["names"], row, PROBLEM["types"], PROBLEM["scales"]):
-        if scale == "log":
-            p[name] = float(10.0 ** val)              # real value; results.csv shows the real value
-        else:
-            p[name] = int(round(val)) if typ == "int" else float(val)
+        real = 10.0 ** val if scale == "log" else val    # log vars sampled in log10 space
+        p[name] = int(round(real)) if typ == "int" else float(real)
     return p
 
 
@@ -194,7 +205,10 @@ def main():
         futs = {ex.submit(evaluate, i, p, train, test): (i, p) for i, p in samples}
         for done, fut in enumerate(concurrent.futures.as_completed(futs), 1):
             i, p = futs[fut]
-            rmse, r2, status = fut.result()
+            try:
+                rmse, r2, status = fut.result()
+            except Exception as e:  # a worker error must not abort the whole sweep
+                rmse, r2, status = float("nan"), float("nan"), f"worker_error:{type(e).__name__}"
             Y[i] = rmse
             w.writerow({"index": i, "rmse": rmse, "r2": r2, "status": status, **p})
             csvf.flush()
