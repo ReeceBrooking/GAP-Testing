@@ -39,7 +39,12 @@ from ase.data import chemical_symbols
 # --------------------------------------------------------------------------------------
 # Configuration (edit here)
 # --------------------------------------------------------------------------------------
-BASE_DIR   = os.path.dirname(os.path.abspath(__file__))   # this project dir (portable: move it/run anywhere)
+BASE_DIR   = os.path.dirname(os.path.abspath(__file__))   # this project dir (code + data): keep in projappl
+# Where all GENERATED output goes (runs/<i>/, results.csv, sensitivity/best JSON, subsample copies).
+# Defaults to the project dir (unchanged locally); on Mahti point it at fast, roomy scratch:
+#   export OUTPUT_DIR=/scratch/project_XXXXXXX/gap_runs
+# scratch is not backed up and auto-cleans (~90 days) -> copy final results.csv/*.json back afterwards.
+OUTPUT_DIR = os.environ.get("OUTPUT_DIR", BASE_DIR)
 # gap_fit/quip binaries are OUTSIDE the project and machine-specific -> override with QUIP_BIN env var
 # (e.g. on Mahti: export QUIP_BIN=/path/to/QUIP/build/.../Programs).
 QUIP_PROG  = os.environ.get("QUIP_BIN", "/home/reece/QUIP/builddir/src/Programs")
@@ -81,15 +86,18 @@ SPARSE_FILE   = ""          # path to sparse-index file, only used when SPARSE_M
 RND_SEED = None
 
 # Threads per gap_fit/quip process. gap_fit has no OpenMP here, so parallelism comes only from
-# threaded OpenBLAS (the SVD/solve); this caps it so concurrent fits don't oversubscribe. Set it to
-# the cores you want EACH fit to use; the Sobol sweep then runs (cores // THREADS) fits at once.
-THREADS = 4
+# threaded OpenBLAS (the SVD/solve); this caps it so concurrent fits don't oversubscribe. The Sobol
+# sweep then runs (cores // THREADS) fits at once. The workload is largely SINGLE-threaded (descriptor
+# eval, quip, trim, score), so FEWER threads + MORE concurrent fits fills a big node better -- but at
+# high n_sparse memory becomes the limit, and then FEWER concurrent fits with MORE threads each is
+# better. Tune per machine via the GAP_THREADS env var (default 2). On Mahti: export GAP_THREADS=2.
+THREADS = int(os.environ.get("GAP_THREADS", "2"))
 
 # Per-run timeouts
 FIT_TIMEOUT  = 3600      # seconds per gap_fit
 PRED_TIMEOUT = 1800      # seconds per quip prediction
 
-RUNS_DIR = os.path.join(BASE_DIR, "runs")
+RUNS_DIR = os.path.join(OUTPUT_DIR, "runs")
 
 # --------------------------------------------------------------------------------------
 # Hyperparameters: single source of truth.

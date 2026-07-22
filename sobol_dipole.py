@@ -33,7 +33,7 @@ from SALib.analyze import sobol as sobol_analyze
 
 import gap_dipole as core
 from gap_dipole import (HYPERPARAMS, PER_SPECIES_CAPABLE, SPECIES_Z, DESCRIPTOR, PRED_KEY,
-                        RUNS_DIR, BASE_DIR, TRAIN_FULL, TEST_FULL,
+                        RUNS_DIR, BASE_DIR, OUTPUT_DIR, TRAIN_FULL, TEST_FULL,
                         species_key, build_gap_string, gap_fit_cmd, evaluate)
 
 # --------------------------------------------------------------------------------------
@@ -115,9 +115,9 @@ PROBLEM = {"num_vars": len(_NAMES), "names": _NAMES, "bounds": _BOUNDS, "types":
 # Smoke-test nominal = every (expanded) variable at its base parameter's fixed value.
 NOMINAL = dict(_FIXED)
 
-RESULTS_CSV = os.path.join(BASE_DIR, "results.csv")
-SENS_JSON   = os.path.join(BASE_DIR, "sensitivity_indices.json")
-BEST_JSON   = os.path.join(BASE_DIR, "best_config.json")
+RESULTS_CSV = os.path.join(OUTPUT_DIR, "results.csv")
+SENS_JSON   = os.path.join(OUTPUT_DIR, "sensitivity_indices.json")
+BEST_JSON   = os.path.join(OUTPUT_DIR, "best_config.json")
 
 
 # --------------------------------------------------------------------------------------
@@ -127,10 +127,10 @@ def prepare_dataset():
     """Subsample train/test once for the sweep; return (train_path, test_path)."""
     train, test = TRAIN_FULL, TEST_FULL
     if SUBSAMPLE_TRAIN:
-        train = core.subsample(TRAIN_FULL, os.path.join(BASE_DIR, "pilot_train.xyz"), SUBSAMPLE_TRAIN)
+        train = core.subsample(TRAIN_FULL, os.path.join(OUTPUT_DIR, "pilot_train.xyz"), SUBSAMPLE_TRAIN)
         print(f"[data] subsampled train -> {SUBSAMPLE_TRAIN} frames: {train}")
     if SUBSAMPLE_TEST:
-        test = core.subsample(TEST_FULL, os.path.join(BASE_DIR, "pilot_test.xyz"), SUBSAMPLE_TEST)
+        test = core.subsample(TEST_FULL, os.path.join(OUTPUT_DIR, "pilot_test.xyz"), SUBSAMPLE_TEST)
         print(f"[data] subsampled test -> {SUBSAMPLE_TEST} frames: {test}")
     return train, test
 
@@ -168,8 +168,15 @@ def smoke_test(train, test):
 # Main
 # --------------------------------------------------------------------------------------
 def main():
+    # HPC safety: if launched as multiple SLURM tasks (srun/--ntasks>1), only rank 0 runs the sweep;
+    # otherwise every task would run the whole sweep and clobber the shared results.csv / runs/<i>/.
+    if int(os.environ.get("SLURM_PROCID", "0")) != 0:
+        sys.exit(0)
+
     ap = argparse.ArgumentParser()
     ap.add_argument("--smoke", action="store_true", help="run only the single smoke-test fit")
+    ap.add_argument("--no-smoke", action="store_true",
+                    help="skip the serial pre-sweep smoke test (saves one full-dataset fit up front)")
     ap.add_argument("--n", type=int, default=N_SOBOL,
                     help=f"Sobol base sample size (default {N_SOBOL}); runs = n*(D+2) if 2nd-order off")
     ap.add_argument("--jobs", type=int, default=MAX_PARALLEL_FITS,
@@ -177,11 +184,21 @@ def main():
     args = ap.parse_args()
     n_base = args.n
 
+    # Visible allocation diagnostic (so a silent collapse to near-serial is obvious in the log).
+    print(f"[cpu] allocated={_allocated_cpus()}  THREADS={core.THREADS}  "
+          f"-> default jobs={MAX_PARALLEL_FITS}  (--jobs={args.jobs})  "
+          f"SLURM_CPUS_ON_NODE={os.environ.get('SLURM_CPUS_ON_NODE', '-')}  "
+          f"SLURM_CPUS_PER_TASK={os.environ.get('SLURM_CPUS_PER_TASK', '-')}")
+    if _allocated_cpus() < core.THREADS:
+        print(f"[cpu] WARNING: only {_allocated_cpus()} core(s) detected (< THREADS={core.THREADS}) "
+              "-> the sweep will run NEARLY SERIAL. Check your sbatch --cpus-per-task / partition.")
+
     os.makedirs(RUNS_DIR, exist_ok=True)
     train, test = prepare_dataset()
 
-    if not smoke_test(train, test):
-        sys.exit(1)
+    if not args.no_smoke:
+        if not smoke_test(train, test):
+            sys.exit(1)
     if args.smoke:
         return
 
